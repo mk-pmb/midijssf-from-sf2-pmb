@@ -1,0 +1,32 @@
+{ "name": "midijssf-from-sf2-pmb",
+  "version": "0.1.0",
+  "description": "Utilities for converting soundfonts from .sf2 to MIDI.js format.",
+  "keywords": [ "convert", "midi", "soundfont" ],
+
+  "author": "M.K. (https://github.com/mk-pmb)",
+  "homepage": "https://github.com/mk-pmb/midijssf-from-sf2-pmb/#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mk-pmb/midijssf-from-sf2-pmb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mk-pmb/midijssf-from-sf2-pmb/issues"
+  },
+  "contributors": [],
+
+  "private": false, "license": "ISC",
+
+  "main": "cli.js",
+  "bin": "cli.js",
+  "scripts": { "test": "nodejs test/all.js" },
+  "directories": { "test": "test" },
+
+  "dependencies": {
+  },
+  "devDependencies": {
+    "equal-pmb": "^0.1.13"
+  },
+
+
+  "npm vs. BOM = Unexpected token": "-*- coding: UTF-8 -*-"
+}
