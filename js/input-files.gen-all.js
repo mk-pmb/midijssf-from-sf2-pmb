@@ -52,20 +52,13 @@ function logProgress(msg) {
 }
 
 
-function andTheDrumsToo(iter) {
-  var r = mapRange(ranges, 'instrumentId', iter);
-  r.push(iter(-10));
-  return r;
-}
-
-
 async.series([
   function makeDirs(next) {
     logProgress('gen. instrument directories');
-    var dirNames = andTheDrumsToo(makeInputFn);
+    var dirNames = mapRange.instrumentsAndPercussion(ranges, makeInputFn);
     eachConc(dirNames, mkdirIfMissing, next);
   }
-].concat(andTheDrumsToo(function (insId) {
+].concat(mapRange.instrumentsAndPercussion(ranges, function (insId) {
   var names = { '-10': 'percussion' };
   return function (next) {
     logProgress('gen. MIDI files for ' + (names[insId]

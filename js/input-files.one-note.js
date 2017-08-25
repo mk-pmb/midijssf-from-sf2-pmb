@@ -4,6 +4,7 @@
 
 var EX;  //, MidiWr = re//quire('midi-writer-js');
 
+function ifNum(x, d) { return (x === +x ? x : d); }
 
 function hex2(n) {
   return ('0' + (+n // not parseInt: "+" accepts '0xFF' hex notation strings
@@ -13,7 +14,7 @@ function hex2(n) {
 
 EX = function makeMidiData(opts) {
   function byteSlot(m, v) { return (byteSlot[m && v] || ''); }
-  var ins = (+opts.instrument || 0), midiChannel = 1;
+  var ins = ifNum(opts.instrument, 1), midiChannel = 1;
   if (ins === -10) {
     ins = 1;
     midiChannel = 10;
@@ -23,6 +24,7 @@ EX = function makeMidiData(opts) {
   }
   byteSlot.i = hex2(ins - 1);
   byteSlot.n = hex2(opts.midiNote);
+  byteSlot.v = hex2(ifNum(opts.velocity, 127));
   byteSlot.c = (midiChannel - 1).toString(16);
   return Buffer.from(EX.templateHex.replace(/#(\w)/g, byteSlot
     ).replace(/\s+/g, ''), 'hex');
@@ -30,7 +32,7 @@ EX = function makeMidiData(opts) {
 
 
 EX.templateHex = '4d546864 00000006 00010001 01e04d54 726b0000 001400ff ' +
-  '040000c0 #i009#c#n 5592608#c #n5500ff 2f00';
+  '040000c0 #i009#c#n #v92608#c #n#v00ff 2f00';
 
 
 EX.runFromCLI = function () {
