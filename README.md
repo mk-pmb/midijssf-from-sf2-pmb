@@ -40,6 +40,23 @@ How it works
 
 
 
+Template variables
+------------------
+
+Some options support variable. Their notation is `\v` (U+000B line tabulation)
+followed by a single letter:
+
+* `d`: config.destDir
+* `B`: config.sf2basename
+* `b`: config.sf2basename.toLowerCase()
+* `f`: current output audio format ID
+* `i`: current instrument ID (`001`…`128`, or `-10` for percussion)
+* `I`: current instrument name (or config.chn10Name for percussion)
+  * `s`: same but in snake_case
+
+
+
+
 
 <!--#toc stop="scan" -->
 
