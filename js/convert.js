@@ -4,7 +4,8 @@
 
 var EX, defaultConfig = require('../cfg.default.js'),
   async = require('async'),
-  fs = require('fs'), pathLib = require('path'),
+  splitCb = require('splitcb'),
+  fs = require('fs'), pathLib = require('path'), mkdirp = require('mkdirp'),
   mergeOpts = require('merge-options'),
   gm1InstNames = require('midi-instrument-names-gm1-pmb').instruments,
   mapRange = require('./map-range.js'),
@@ -12,6 +13,7 @@ var EX, defaultConfig = require('../cfg.default.js'),
   shellUtil = require('./shell-util.js'),
   bundleFormats = require('./bundle-formats.js'),
   ld = require('lodash'),
+  kisi = require('./kitchen-sink.js'),
   numCPUs = require('os').cpus().length;
 
 
@@ -21,51 +23,54 @@ function fail(why, cb) { (cb || thr0w)(new Error(why)); }
 function missOpt(opt, cb) { fail('Missing required option: ' + opt, cb); }
 function ifObj(x, d) { return ((x && typeof x) === 'object' ? x : d); }
 function isStr(x, no) { return (((typeof x) === 'string') || no); }
+function ifFun(x, d) { return ((typeof x) === 'function' ? x : d); }
 function filterIfOr(x, f) { return ((f && f(x)) || x); }
+function asyncNoop(cb) { cb(); }
 
 function adjProp(obj, prop, adj) {
   adj = adj(obj[prop], obj);
   if (adj !== undefined) { obj[prop] = adj; }
 }
 
+function asyncStorer(dest, prop, then) {
+  return function (err, data) {
+    dest[prop] = data;
+    return then(err, data);
+  };
+}
+
 
 EX = function convert(cfg) {
   cfg = EX.prepareConfig(cfg);
-  var insPacks, baseVars, primFmtId = cfg.outFmt, noteRanges, logger,
-    primFmtOpt = mergeOpts(cfg.fmt_defaults, cfg['fmt_' + primFmtId]);
+  var insPacks = [], baseVars, noteRanges, logger;
 
   logger = (cfg.logProgress || identity);
-  if (isStr(logger)) { logger = console[logger].bind(console); }
+  if (isStr(logger)) { logger = kisi.makeLogger(logger); }
 
-  baseVars = { d: cfg.destDir, f: primFmtId,
+  baseVars = { d: cfg.destDir,
     B: cfg.sf2basename, b: cfg.sf2basename.toLowerCase(),
     };
 
   noteRanges = ld.mapValues({ inst: 'noteRange', drum: 'chn10Note'
     }, function (o) { return mapRange(cfg, o); });
 
-  function packPack(insId) {
+  function addPack(insId) {
     var notesRange = noteRanges.inst, insName = cfg.instrumentNames[insId - 1];
     if (insId === -10) {
       notesRange = noteRanges.drum;
       insName = cfg.chn10Name;
+      if (insName === false) { return; }
     }
-    return { insId: insId, insName: insName, notesRange: notesRange,
-      cfg: cfg, log: logger, fmtId: primFmtId, fmtOpt: primFmtOpt,
-      baseVars: baseVars };
+    insPacks.push({ insId: insId, insName: insName, notesRange: notesRange,
+      cfg: cfg, log: logger, baseVars: baseVars });
   }
+  mapRange.instrumentsAndPercussion(cfg, addPack);
+  insPacks = filterIfOr(insPacks, cfg.whichInstruments);
 
-  insPacks = filterIfOr(mapRange.instrumentsAndPercussion(cfg, packPack),
-    cfg.whichInstruments);
-  async.eachLimit(insPacks, cfg.concurrency,
-    EX.convertOneInstrument,
-    (cfg.whenAllConverted || EX.reportDone));
-};
+  if (!insPacks) { logger('emptyTodo_instruments'); }
 
-
-EX.reportDone = function (err) {
-  if (err) { throw err; }
-  console.log('+OK done.');
+  async.eachSeries(insPacks, EX.convertOneInstrument,
+    (cfg.whenAllConverted || splitCb(logger.bind(null, '+OK done.'))));
 };
 
 
@@ -90,43 +95,97 @@ EX.prepareConfig = function (cfg) {
   if (!cfg.sf2basename) {
     cfg.sf2basename = pathLib.basename(cfg.sf2file).replace(/\.sf2$/i, '');
   }
-  cfg.primaryConvCmd = shellUtil.genFluidsynthCmd(cfg);
+  cfg.cmd_synthCapture = shellUtil.genCmd_synthCapture(cfg);
+  cfg.cmd_synthCleanup = shellUtil.genCmd_synthCleanup(cfg);
   return cfg;
 };
 
 
 EX.convertOneInstrument = function (pack, nextInst) {
-  var insId = pack.insId, cmd1 = pack.cfg.primaryConvCmd,
-    shellOpts = { enc: 'base64', maxlen: pack.fmtOpt.audioClipMaxBytes };
-  if (!pack.notesRange.length) { return nextInst(); }
-  pack.log('primaryConvertBegin', { insId: insId, insName: pack.insName });
+  var cfg = pack.cfg, insId = pack.insId, insName = pack.insName,
+    convJobs = [];
+  if (!pack.notesRange.length) {
+    pack.log('emptyTodo_notesRange', { insId: insId, insName: pack.insName });
+    return nextInst();
+  }
+
+  Object.keys(cfg).forEach(function (k) {
+    var p = 'fmt_', l = p.length;
+    if (k.length <= l) { return; }
+    if (k.slice(0, l) !== p) { return; }
+    if (!cfg[k]) { return; }
+    if (!cfg[k].add) { return; }
+    convJobs.push({ fmt: k.slice(l) });
+  });
+
+  if (!convJobs.length) {
+    pack.log('emptyTodo_audioFmt', { insId: insId, insName: insName });
+    return nextInst();
+  }
 
   pack.fmtVars = Object.assign({
     i: ('000' + insId).slice(-3),
     I: pack.insName,
     s: ld.snakeCase(ld.deburr(pack.insName)),
   }, pack.baseVars);
-  pack.fmtOpt = EX.insertVars(pack.fmtVars, pack.fmtOpt);
 
-  function renderNote(noteId, nextNote) {
-    var midiFn = makeInputFn(insId, noteId);
-    shellUtil.stdioConvert(cmd1.concat(midiFn), shellOpts, nextNote);
+  function runJob(job, nextJob) {
+    var fmt = job.fmt, func = (job.func || 'makeAudioBundle'),
+      logDetails = { insId: insId, insName: insName };
+    if (fmt) { logDetails.fmt = fmt; }
+    pack.log(func + '_begin', logDetails);
+    function jobDone(err) {
+      logDetails.error = (err || false);
+      pack.log(func + '_done', logDetails);
+      setImmediate(nextJob, err);
+    }
+    EX[func].apply(null, (fmt ? [fmt] : []).concat([pack, jobDone]));
   }
 
-  function postProcessNotes(err, audio) {
-    pack.log('primaryConvertDone', { insId: insId, insName: pack.insName,
-      error: (err || false) });
-    if (err) { return nextInst(err); }
+  async.eachSeries([ { func: 'synthCapture' },
+    { func: 'synthCleanup' },
+    ].concat(convJobs), runJob, nextInst);
+};
 
-    function toDataUrl(s) { return toDataUrl.p + s; }
-    toDataUrl.p = 'data:' + pack.fmtOpt.mimeType + ';base64,';
-    pack.audio = audio.map(toDataUrl);
 
-    function save() { return EX.saveWavetable(pack, nextInst); }
-    setImmediate(save);
+EX.massConvert = function (pack, listProp, convOpt, then) {
+  async.mapLimit(pack[listProp], pack.cfg.concurrency,
+    shellUtil.stdioConvert.bind(null, pack.cfg, convOpt), then);
+};
+
+
+EX.synthCapture = function (pack, whenCaptured) {
+  EX.massConvert(pack, 'notesRange', { cmd: pack.cfg.cmd_synthCapture,
+    inputPrep: makeInputFn.bind(null, pack.insId) },
+    asyncStorer(pack, 'primaryAudio', whenCaptured));
+};
+
+
+EX.synthCleanup = function (pack, whenCleaned) {
+  EX.massConvert(pack, 'primaryAudio', { cmd: pack.cfg.cmd_synthCleanup },
+    asyncStorer(pack, 'primaryAudio', whenCleaned));
+};
+
+
+EX.makeAudioBundle = function (fmtId, origPack, nextBundle) {
+  var pack = Object.assign({}, origPack), cfg = pack.cfg, fmtOpt, cmdGen;
+  pack.fmtId = fmtId;
+  Object.assign(pack.fmtVars, { F: fmtId, f: fmtId.toLowerCase() });
+  fmtOpt = EX.insertVars(pack.fmtVars,
+    mergeOpts(cfg.fmt_defaults, cfg['fmt_' + fmtId]));
+  pack.fmtOpt = fmtOpt;
+
+  cmdGen = shellUtil['genCmd_' + fmtOpt.codec];
+  if (!cmdGen) { return fail('Unknown codec: ' + fmtOpt.codec, nextBundle); }
+
+  function saveConvertedSamples(err, samples) {
+    if (err) { return nextBundle(err); }
+    pack.log('urlifySamples', { fmt: pack.fmtId, n: samples.length, });
+    pack.sampleDataUrls = samples.map(kisi.makeDataUrlifier(fmtOpt.mimeType));
+    return EX.saveWavetable(pack, nextBundle);
   }
-
-  async.mapSeries(pack.notesRange, renderNote, postProcessNotes);
+  EX.massConvert(pack, 'primaryAudio', { cmd: cmdGen(fmtOpt, pack) },
+    saveConvertedSamples);
 };
 
 
@@ -141,16 +200,19 @@ EX.saveWavetable = function (pack, whenAllSaved) {
   function saveOneBundleFmt(bun, nextBundle) {
     if (!bun.render) { return nextBundle(); }
     var fileData, destFileOpt = 'bundleFile_' + bun.id,
-      destFile = pack.fmtOpt[destFileOpt];
+      destFile = pack.fmtOpt[destFileOpt], destAbs;
     if (!destFile) { return missOpt(destFileOpt, nextBundle); }
     fileData = (bun.render(pack) || '');
     pack.log('gonnaWriteBundle', { filename: destFile, len: fileData.length });
-    function written(err) {
+    destAbs = pathLib.join(pack.cfg.destDir, destFile);
+    async.series([
+      mkdirp.bind(null, pathLib.dirname(destAbs)),
+      fs.writeFile.bind(null, destAbs, fileData),
+    ], function written(err) {
       pack.log('wroteBundle', { filename: destFile, len: fileData.length,
         error: (err || false) });
       nextBundle(err);
-    }
-    fs.writeFile(pathLib.join(pack.cfg.destDir, destFile), fileData, written);
+    });
   }
   async.eachSeries(bundleFormats, saveOneBundleFmt, whenAllSaved);
 };

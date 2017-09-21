@@ -25,7 +25,7 @@ SOX_ARG=(
   # … to stdout (so that in node.js, we get a stream):
   -
 
-  remix -   # downmix to stereo
+  # remix -   # downmix to stereo
 
   # trim silence from start of audio:
   # silence "${SILENCE_OPT[@]}"

@@ -8,15 +8,21 @@ midijssf-from-sf2-pmb
 Utilities for converting .sf2 wavetables to MIDI.js sound font format.
 <!--/#echo -->
 
-The space and lowercase "f" in "MIDI.js sound font(s)" is my attempt to
-help you discern them from
-[the brand name](https://en.wikipedia.org/wiki/SoundFont).
+The space and lowercase "f" in "sound font(s)" is my attempt to help you
+discern them from [the brand name](https://en.wikipedia.org/wiki/SoundFont).
 
 
 Usage
 -----
 
 See the `midijssf-timgm6mb-pmb` package for how to use this one.
+
+Some hints:
+
+* Beware that mono music usually won't survive the naive karaoke approach
+  (`sox`: `oops` effect). If you try to save bytes this way, really compare
+  the cost for each selected output format. Occasionally I have been surprised
+  by how small a difference it made.
 
 
 How it works
@@ -26,17 +32,14 @@ How it works
   * Make a MIDI file playing that note on that instrument.
     * If things work out, this is done only once when the package is installed,
       by running the `input-files.gen-all.js` script.
-  * Let `fluidsynth` convert the MIDI to some primary audio format,
-    using the configured `.sf2` wavetable.
-    * You can check the available formats with
-      `fluidsynth --audio-file-type help`.
-      If you want formats that aren't in the list, or want to configure
-      details about compression and quality (probably yes),
-      use a lossless format like `flac` (or as last resort, `wav`) for the
-      primary audio data, and then convert it later on.
-  * Combine the audio clips into a MIDI.js sound font.
-  * Optionally convert the sound font to additional formats — this can mean
-    the container format, the samples inside it, or both.
+  * Let `fluidsynth` convert the MIDI to FLAC audio, using the configured
+    `.sf2` wavetable.
+    * WAV or AU seemed more efficient but caused problems with the plumbing.
+  * Let `sox` convert the FLAC to WAV, and optionally trim trailing silence
+    in the process.
+  * Encode the samples to selected output formats (e.g. Vorbis, MP3)
+    and compile them into bundles
+    (MIDI.js sound font and/or Compact JSON WaveTable).
 
 
 
@@ -49,7 +52,8 @@ followed by a single letter:
 * `d`: config.destDir
 * `B`: config.sf2basename
 * `b`: config.sf2basename.toLowerCase()
-* `f`: current output audio format ID
+* `F`: current output audio format ID
+  * `f`: same but in lowercase
 * `i`: current instrument ID (`001`…`128`, or `-10` for percussion)
 * `I`: current instrument name (or config.chn10Name for percussion)
   * `s`: same but in snake_case

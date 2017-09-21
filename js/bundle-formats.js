@@ -3,6 +3,7 @@
 'use strict';
 
 var EX = [], ld = require('lodash'), utf8bom = '\uFEFF',
+  kisi = require('./kitchen-sink.js'),
   commonPrefix = require('common-prefix'),
   midijsNoteNames = require('./midijs-note-names.json').slice();
 
@@ -21,25 +22,20 @@ function calculateCommonSides(list) {
 }
 
 
-function makeSlicer(a, b) {
-  if (b < 0) { return function (x) { return x.slice(a, b); }; }
-  if (b > 0) { return function (x) { return x.slice(a, a + b); }; }
-  return function (x) { return x.slice(a); };
-}
-
-
 regFmt({ id: 'cjwt', name: 'Compact JSON Wavetable', fext: '.json',
   render: function renderCjwt(pack) {
-    var audio = pack.audio, data, tmp;
-    data = { name: pack.insName, noteIdOffset: pack.notesRange[0] };
+    var samples = pack.sampleDataUrls, data, tmp;
+    data = { name: pack.insName,
+      audioFmt: pack.fmtId,
+      noteIdOffset: pack.notesRange[0] };
 
-    calculateCommonSides(audio);
-    tmp = audio.commonPrefix;
+    calculateCommonSides(samples);
+    tmp = samples.commonPrefix;
     if (tmp) {
       data.audioPrefix = tmp;
-      audio = audio.map(makeSlicer(tmp.length));
+      samples = samples.map(kisi.makeSlicer(tmp.length));
     }
-    data.noteAudio = audio;
+    data.noteAudio = samples;
     return (utf8bom + '{ "fmt": "cjwt", "fmtVer": 1,'
       + JSON.stringify(data, null, 2).slice(1) + '\n');
   },
@@ -65,7 +61,7 @@ regFmt({ id: 'midijs', name: 'MIDI.js', fext: '.midi.js',
       "if (typeof MIDI === 'undefined') var MIDI = {};",
       "if (typeof MIDI.Soundfont === 'undefined') MIDI.Soundfont = {};",
       ("MIDI.Soundfont." + pack.fmtVars.s + " = {"),
-      ''].join('\n') + pack.audio.map(wn).join(',\n') + '\n};\n');
+      ''].join('\n') + pack.sampleDataUrls.map(wn).join(',\n') + '\n};\n');
   },
   });
 

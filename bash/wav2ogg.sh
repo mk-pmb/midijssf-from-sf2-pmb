@@ -5,7 +5,7 @@
 [ -n "$OGG_QUALITY" ] || OGG_QUALITY=-1  # WWW needs small files
 OGG_OPTS=(
   --quiet
-  --downmix     # to mono
+  # --downmix     # to mono
   --quality="$OGG_QUALITY"
   --discard-comments
   --output=/dev/fd/15
