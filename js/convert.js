@@ -197,8 +197,10 @@ EX.makeAudioBundle = function (fmtId, origPack, nextBundle) {
   ], function (err) {
     //kisi.wipeList(pack, 'sampleDataUrls');
     pack.log('memoryUsage', EX.memoryReport());
-    requestGarbageCollection();
-    pack.log('garbageCollected', EX.memoryReport());
+    if (cfg.debug.requestGarbageCollection) {
+      requestGarbageCollection();
+      pack.log('garbageCollected', EX.memoryReport());
+    }
     return nextBundle(err);
   });
 };
