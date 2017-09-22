@@ -1,5 +1,5 @@
 { "name": "midijssf-from-sf2-pmb",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Utilities for converting .sf2 wavetables to MIDI.js sound font format.",
   "keywords": [ "convert", "midi", "wavetable", "sf2" ],
 
@@ -24,10 +24,17 @@
   "directories": { "test": "test" },
 
   "dependencies": {
-    "async": "^2.0.1"
+    "async": "^2.5.0",
+    "common-prefix": "^1.1.0",
+    "lodash": "^4.17.4",
+    "memwatch-next": "^0.3.0",
+    "merge-options": "^1.0.0",
+    "midi-instrument-names-gm1-pmb": "^1.0.2",
+    "midifile": "^1.0.4",
+    "mkdirp": "^0.5.1",
+    "splitcb": "^0.1.1"
   },
   "devDependencies": {
-    "equal-pmb": "^0.1.13"
   },
 
 
