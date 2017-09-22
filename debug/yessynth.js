@@ -6,7 +6,7 @@ require('midijssf-from-sf2-pmb')({ destDir: module,
   sf2file:      '/dev/null/404/none',
   fmt_cat: { add: true, codec: 'custom', mimeType: 'text/plain', cmd: 'cat' },
   concurrency: 1,
-  debug: { requestGarbageCollection: true },
+  debug: { requestGarbageCollection: false },
 
   refineConfig: function (cfg) {
     var synth = [ 'bash', '-c',

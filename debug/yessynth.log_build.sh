@@ -10,13 +10,32 @@ function yessynth_log_build () {
   local TIMECAT=( timecat -f '@%@ %, +%+ %, ' )
   </dev/null "${TIMECAT[@]}" &>/dev/null || TIMECAT=cat
 
-  local MEMLIM_KB=160
+  local MEMLIMS_KB=(
+    190
+    200
+    210
+    220
+    )
+
   local LOGS_DIR='logs.yessynth'
-  local LOGFN="$LOGS_DIR/$(date +'%y%m%d-%H%M%S').${MEMLIM_KB}k.log"
   mkdir -p "$LOGS_DIR" || return $?
-  memlimit_loud "$MEMLIM_KB" nodejs yessynth.js |& "${TIMECAT[@]}" \
-    | tee -- "$LOGFN"
-  local RV="${PIPESTATUS[*]}"
+  local LOG_BFN="$LOGS_DIR/$(date +'%y%m%d-%H%M%S')"
+  local RV=
+  local MEMLIM=
+  for MEMLIM in "${MEMLIMS_KB[@]}"; do
+    memlimit_loud "$MEMLIM" nodejs yessynth.js |& "${TIMECAT[@]}" \
+      | tee -- "$LOG_BFN.${MEMLIM}k.log"
+    pipe_rv "${PIPESTATUS[*]}"; RV=$?
+    [ "$RV" == 0 ] && break
+    # [ "$RV" == 0 ] || break
+  done
+
+  return "$RV"
+}
+
+
+function pipe_rv () {
+  local RV="$*"
   let RV="${RV// /+}"
   return $RV
 }
