@@ -49,7 +49,7 @@ module.exports = {
 
 
   // Performance tweaks
-  concurrency: -2,    // -n -> n * (number of CPUs)
+  concurrency: -1,    // -n -> n * (number of CPUs)
 
   audioSampleMaxBytes: 16e6,
     // ^-- Conversion might be aborted if a sample grows too large.
@@ -67,7 +67,7 @@ module.exports = {
     //     How long to idle (in seconds) before we assume all bytes are
     //     really written and we can safely read them.
   stdinDelaySec: 0.1,
-  convTimeoutSec: 10,   // timeout for each conversion of a single note
+  convTimeoutSec: 60,   // timeout for each conversion of a single note
 
 
 

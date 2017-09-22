@@ -13,7 +13,9 @@ var EX, defaultConfig = require('../cfg.default.js'),
   shellUtil = require('./shell-util.js'),
   bundleFormats = require('./bundle-formats.js'),
   ld = require('lodash'),
+  isAry = Array.isArray,
   kisi = require('./kitchen-sink.js'),
+  requestGarbageCollection = require('memwatch-next').gc,
   numCPUs = require('os').cpus().length;
 
 
@@ -26,6 +28,8 @@ function isStr(x, no) { return (((typeof x) === 'string') || no); }
 function ifFun(x, d) { return ((typeof x) === 'function' ? x : d); }
 function filterIfOr(x, f) { return ((f && f(x)) || x); }
 function asyncNoop(cb) { cb(); }
+function bytes2mibi(n) { return Math.round(n / 10485.76) / 100; }
+
 
 function adjProp(obj, prop, adj) {
   adj = adj(obj[prop], obj);
@@ -79,7 +83,7 @@ EX.prepareConfig = function (cfg) {
   adjProp(cfg, 'concurrency', function (c) {
     c = (+c || 0);
     if (c < 0) { c *= -numCPUs; }
-    return Math.max(c, 1);
+    return Math.max(Math.round(c), 1);
   });
   adjProp(cfg, 'instrumentNames', function (n) {
     if (n && n.substr) {
@@ -97,6 +101,7 @@ EX.prepareConfig = function (cfg) {
   }
   cfg.cmd_synthCapture = shellUtil.genCmd_synthCapture(cfg);
   cfg.cmd_synthCleanup = shellUtil.genCmd_synthCleanup(cfg);
+  if (cfg.refineConfig) { cfg.refineConfig(cfg); }
   return cfg;
 };
 
@@ -169,6 +174,7 @@ EX.synthCleanup = function (pack, whenCleaned) {
 
 EX.makeAudioBundle = function (fmtId, origPack, nextBundle) {
   var pack = Object.assign({}, origPack), cfg = pack.cfg, fmtOpt, cmdGen;
+  origPack = null;
   pack.fmtId = fmtId;
   Object.assign(pack.fmtVars, { F: fmtId, f: fmtId.toLowerCase() });
   fmtOpt = EX.insertVars(pack.fmtVars,
@@ -178,19 +184,41 @@ EX.makeAudioBundle = function (fmtId, origPack, nextBundle) {
   cmdGen = shellUtil['genCmd_' + fmtOpt.codec];
   if (!cmdGen) { return fail('Unknown codec: ' + fmtOpt.codec, nextBundle); }
 
-  function saveConvertedSamples(err, samples) {
-    if (err) { return nextBundle(err); }
-    pack.log('urlifySamples', { fmt: pack.fmtId, n: samples.length, });
-    pack.sampleDataUrls = samples.map(kisi.makeDataUrlifier(fmtOpt.mimeType));
-    return EX.saveWavetable(pack, nextBundle);
-  }
-  EX.massConvert(pack, 'primaryAudio', { cmd: cmdGen(fmtOpt, pack) },
-    saveConvertedSamples);
+  async.waterfall([
+    EX.massConvert.bind(null, pack, 'primaryAudio',
+      { cmd: cmdGen(fmtOpt, pack) }),
+    function urlify(samples, then) {
+      pack.log('urlifySamples', { fmt: pack.fmtId, n: samples.length, });
+      pack.sampleDataUrls = samples.map(kisi.makeDataUrlifier(fmtOpt.mimeType));
+      //samples = kisi.wipeList(samples);
+      then();
+    },
+    EX.saveWavetable.bind(null, pack),
+  ], function (err) {
+    //kisi.wipeList(pack, 'sampleDataUrls');
+    pack.log('memoryUsage', EX.memoryReport());
+    requestGarbageCollection();
+    pack.log('garbageCollected', EX.memoryReport());
+    return nextBundle(err);
+  });
+};
+
+
+EX.memoryReport = function (pack) {
+  var mr = ld.mapValues(process.memoryUsage(), bytes2mibi);
+  mr.unit = 'MiB';
+  if (pack) { mr = Object.assign({ insId: pack.insId,
+    insName: pack.insName,
+    }, mr); }
+  return mr;
 };
 
 
 EX.insertVars = function insVars(v, x) {
-  if (ifObj(x)) { return ld.mapValues(x, insVars.bind(null, v)); }
+  if (ifObj(x)) {
+    if (isAry(x)) { return x.map(insVars.bind(null, v)); }
+    return ld.mapValues(x, insVars.bind(null, v));
+  }
   if (!isStr(x)) { return x; }
   return x.replace(/\v(\w)/g, function (m, n) { return String(v[m && n]); });
 };
@@ -203,11 +231,15 @@ EX.saveWavetable = function (pack, whenAllSaved) {
       destFile = pack.fmtOpt[destFileOpt], destAbs;
     if (!destFile) { return missOpt(destFileOpt, nextBundle); }
     fileData = (bun.render(pack) || '');
-    pack.log('gonnaWriteBundle', { filename: destFile, len: fileData.length });
     destAbs = pathLib.join(pack.cfg.destDir, destFile);
     async.series([
       mkdirp.bind(null, pathLib.dirname(destAbs)),
-      fs.writeFile.bind(null, destAbs, fileData),
+      function (next) {
+        pack.log('gonnaWriteBundle', { filename: destFile,
+          dataContainer: fileData.constructor.name,
+          size: fileData.length });
+        fs.writeFile(destAbs, fileData, next);
+      }
     ], function written(err) {
       pack.log('wroteBundle', { filename: destFile, len: fileData.length,
         error: (err || false) });

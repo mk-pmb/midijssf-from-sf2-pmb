@@ -156,6 +156,15 @@ EX.genCmd_mp3lame = function (fmtOpt) {
 };
 
 
+EX.genCmd_custom = function (fmtOpt) {
+  var cmd = fmtOpt.cmd, argSlot = fmtOpt.argSlot;
+  cmd = (cmd.split ? cmd.split(/ /) : cmd.slice());
+  if (argSlot < 0) { argSlot += cmd.length; }
+  cmd.inputArgSlot = argSlot;
+  return cmd;
+};
+
+
 
 
 

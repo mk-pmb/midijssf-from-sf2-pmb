@@ -27,6 +27,15 @@ EX.makeLogger = function (chn) {
 };
 
 
+EX.wipeList = function (x, prop) {
+  if (!x) { return; }
+  var c = (prop ? x[prop] : x), i;
+  if (!c) { return; }
+  for (i = c.lenth - 1; i >= 0; i -= 1) { delete c[i]; }
+  if (prop) { delete x[prop]; }
+};
+
+
 
 
 
