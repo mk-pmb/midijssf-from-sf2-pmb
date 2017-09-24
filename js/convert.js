@@ -15,7 +15,8 @@ var EX, defaultConfig = require('../cfg.default.js'),
   ld = require('lodash'),
   isAry = Array.isArray,
   kisi = require('./kitchen-sink.js'),
-  requestGarbageCollection = require('memwatch-next').gc,
+  wa170921_oom = require('./wa170921_oom.js'),
+  memoryReport = require('./memory-report.js'),
   numCPUs = require('os').cpus().length;
 
 
@@ -23,12 +24,10 @@ function identity(x) { return x; }
 function thr0w(err) { throw err; }
 function fail(why, cb) { (cb || thr0w)(new Error(why)); }
 function missOpt(opt, cb) { fail('Missing required option: ' + opt, cb); }
-function ifObj(x, d) { return ((x && typeof x) === 'object' ? x : d); }
 function isStr(x, no) { return (((typeof x) === 'string') || no); }
 function ifFun(x, d) { return ((typeof x) === 'function' ? x : d); }
 function filterIfOr(x, f) { return ((f && f(x)) || x); }
 function asyncNoop(cb) { cb(); }
-function bytes2mibi(n) { return Math.round(n / 10485.76) / 100; }
 
 
 function adjProp(obj, prop, adj) {
@@ -46,7 +45,7 @@ function asyncStorer(dest, prop, then) {
 
 EX = function convert(cfg) {
   cfg = EX.prepareConfig(cfg);
-  var insPacks = [], baseVars, noteRanges, logger;
+  var insPacks = [], baseVars, noteRanges, logger, conv1;
 
   logger = (cfg.logProgress || identity);
   if (isStr(logger)) { logger = kisi.makeLogger(logger); }
@@ -73,7 +72,13 @@ EX = function convert(cfg) {
 
   if (!insPacks) { logger('emptyTodo_instruments'); }
 
-  async.eachSeries(insPacks, EX.convertOneInstrument,
+  conv1 = EX.convertOneInstrument;
+  if (cfg.debug.wa170921_oom) {
+    conv1 = wa170921_oom.convertOneInstrument_wa170921_oom;
+  }
+
+  conv1 = memoryReport.afterPackCb(conv1);
+  async.eachSeries(insPacks, conv1,
     (cfg.whenAllConverted || splitCb(logger.bind(null, '+OK done.'))));
 };
 
@@ -177,7 +182,7 @@ EX.makeAudioBundle = function (fmtId, origPack, nextBundle) {
   origPack = null;
   pack.fmtId = fmtId;
   Object.assign(pack.fmtVars, { F: fmtId, f: fmtId.toLowerCase() });
-  fmtOpt = EX.insertVars(pack.fmtVars,
+  fmtOpt = kisi.insertVars(pack.fmtVars,
     mergeOpts(cfg.fmt_defaults, cfg['fmt_' + fmtId]));
   pack.fmtOpt = fmtOpt;
 
@@ -194,35 +199,7 @@ EX.makeAudioBundle = function (fmtId, origPack, nextBundle) {
       then();
     },
     EX.saveWavetable.bind(null, pack),
-  ], function (err) {
-    //kisi.wipeList(pack, 'sampleDataUrls');
-    pack.log('memoryUsage', EX.memoryReport());
-    if (cfg.debug.requestGarbageCollection) {
-      requestGarbageCollection();
-      pack.log('garbageCollected', EX.memoryReport());
-    }
-    return nextBundle(err);
-  });
-};
-
-
-EX.memoryReport = function (pack) {
-  var mr = ld.mapValues(process.memoryUsage(), bytes2mibi);
-  mr.unit = 'MiB';
-  if (pack) { mr = Object.assign({ insId: pack.insId,
-    insName: pack.insName,
-    }, mr); }
-  return mr;
-};
-
-
-EX.insertVars = function insVars(v, x) {
-  if (ifObj(x)) {
-    if (isAry(x)) { return x.map(insVars.bind(null, v)); }
-    return ld.mapValues(x, insVars.bind(null, v));
-  }
-  if (!isStr(x)) { return x; }
-  return x.replace(/\v(\w)/g, function (m, n) { return String(v[m && n]); });
+  ], nextBundle);
 };
 
 

@@ -7,7 +7,7 @@ function yessynth_log_build () {
   local SELFPATH="$(readlink -m "$BASH_SOURCE"/..)"
   cd "$SELFPATH" || return $?
 
-  local TIMECAT=( timecat -f '@%@ %, +%+ %, ' )
+  local TIMECAT=( timecat -f '@%@ %, +%+ %, ' )
   </dev/null "${TIMECAT[@]}" &>/dev/null || TIMECAT=cat
 
   local MEMLIMS_KB=(

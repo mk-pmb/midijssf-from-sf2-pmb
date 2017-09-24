@@ -70,6 +70,13 @@ module.exports = {
   convTimeoutSec: 60,   // timeout for each conversion of a single note
 
 
+  debug: {
+    wa170921_oom: true,
+      // ^-- Render each instrument in a separate child_process.
+      // Temporary workaround to avoid accumulating lots of external memory.
+  },
+
+
 
 
 

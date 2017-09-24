@@ -33,8 +33,7 @@ EX.genCmd_synthCapture = function (cfg) {
   cmd.push('--disable-lash',
     '--audio-file-type=flac',
     '--fast-render=/proc/self/fd/42',
-    cfg.sf2file);
-  cmd.inputArgSlot = cmd.length;
+    cfg.sf2file, { fx: 'input' });
   return cmd;
 };
 
@@ -96,8 +95,8 @@ EX.stdioConvert = function (cfg, opt, inputData, whenConverted) {
   var cmd = opt.cmd, args = cmd.slice(1), child;
 
   if (opt.inputPrep) { inputData = opt.inputPrep(inputData, opt); }
-  if (cmd.inputArgSlot) {
-    args[cmd.inputArgSlot - 1] = inputData;
+  if ((args.slice(-1)[0] || false).fx === 'input') {
+    args[args.length - 1] = inputData;
     inputData = null;
   }
 

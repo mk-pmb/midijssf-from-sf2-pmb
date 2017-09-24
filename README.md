@@ -15,7 +15,7 @@ discern them from [the brand name](https://en.wikipedia.org/wiki/SoundFont).
 Usage
 -----
 
-See the `midijssf-timgm6mb-pmb` package for how to use this one.
+See the [`midijssf-timgm6mb-pmb`][tim6pmb] package for how to use this one.
 
 Some hints:
 
@@ -76,6 +76,7 @@ Known issues
 
 &nbsp;
 
+  [tim6pmb]: https://github.com/mk-pmb/midijssf-timgm6mb-pmb
 
 License
 -------
